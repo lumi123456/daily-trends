@@ -91,21 +91,56 @@ for r in repos:
         unique_repos.append(r)
 
 # 输出
+# 批量翻译描述，顺序与仓库列表一致
+import json
+import os
+import urllib.parse
+import urllib.request
+
+items_with_desc = [r for r in unique_repos[:25] if r['desc']]
+translations = []
+
+if items_with_desc:
+    auth_key = os.environ.get('DEEPL_AUTH_KEY')
+    if not auth_key:
+        raise RuntimeError('缺少 DEEPL_AUTH_KEY，请在仓库 Secrets 中配置')
+
+    data = urllib.parse.urlencode([
+        ('text', r['desc']) for r in items_with_desc
+    ] + [('target_lang', 'ZH')]).encode('utf-8')
+
+    request = urllib.request.Request(
+        'https://api-free.deepl.com/v2/translate',
+        data=data,
+        headers={
+            'Authorization': f'DeepL-Auth-Key {auth_key}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        method='POST',
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+
+    translations = [item['text'] for item in result['translations']]
+    if len(translations) != len(items_with_desc):
+        raise RuntimeError('翻译条数与英文描述条数不一致')
+
+translated = iter(translations)
+
 for i, r in enumerate(unique_repos[:25], 1):
     print(f"### {i}. [{r['name']}](https://github.com/{r['name']})")
-    
+
     info_parts = []
     if r['lang']:
         info_parts.append(f"📝 {r['lang']}")
     if r['stars_today']:
         info_parts.append(f"⭐ +{r['stars_today']} today")
-    
     if info_parts:
         print(f"\n{' | '.join(info_parts)}")
-    
+
     if r['desc']:
-        print(f"\n{r['desc']}")
-    
+        print(f"\n**English:** {r['desc']}")
+        print(f"\n**中文：** {next(translated)}")
     print()
 
 PYEOF
