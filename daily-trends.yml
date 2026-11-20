@@ -1,0 +1,47 @@
+name: Daily GitHub Trends
+
+on:
+  schedule:
+    # UTC 13:00 = 北京时间 21:00
+    - cron: "0 13 * * *"
+  workflow_dispatch: # 允许在 Actions 页面手动运行
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate report
+        env:
+          TZ: Asia/Shanghai
+        run: bash github-trending.sh
+
+      - name: Commit and push report
+        env:
+          TZ: Asia/Shanghai
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          report="$(date +%Y-%m)/$(date +%F).md"
+
+          # 报告至少应有一条解析出的仓库
+          if ! grep -qE '^### [0-9]+\.' "$report"; then
+            echo "报告中没有解析出仓库，停止提交：$report" >&2
+            exit 1
+          fi
+
+          git add -- "$report"
+          if git diff --cached --quiet; then
+            echo "报告没有变化，无需提交"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add GitHub trends $(date +%F)"
+          git push origin "HEAD:$DEFAULT_BRANCH"
